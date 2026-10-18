@@ -14,7 +14,19 @@ cd driveroo-accuracy-lab
 python3 -m http.server 8000
 ```
 
-Open **http://localhost:8000/editor.html** for the overhead editor, or **http://localhost:8000/** for the simulator. The simulator's existing Three.js assets load from CDNs, so the driving view requires internet access.
+Then pick a door:
+
+| Page | For |
+| --- | --- |
+| `simple.html` | Changing a road's width, lanes or corners and driving it. No jargon, no shortcuts to learn. Start here. |
+| `editor.html` | Everything else: moving the road itself, islands, lamps, paint, Mapillary review, map packages. |
+| `help.html` | Plain-language instructions for `simple.html`. |
+| `index.html` | The simulator. |
+
+Both editors share the same corrections format and the same local draft, so you
+can start in one and finish in the other.
+
+Open **http://localhost:8000/simple.html** to edit, or **http://localhost:8000/** for the simulator. The simulator's existing Three.js assets load from CDNs, so the driving view requires internet access.
 
 1. Search for a road and select a section. The initial selection is Milton Road.
 2. Change its total carriageway width or directional lane counts and apply.
@@ -51,6 +63,26 @@ Drafts are saved in the current browser origin under `driveroo-accuracy-lab:corr
 - No aerial image overlay or external imagery is bundled. Validate against suitable reference material before calling a location accurate.
 
 Start with one junction and its approaches. Verify road widths, lane directions, stop positions and island outlines against a trusted reference, then drive each permitted movement before expanding coverage.
+
+## Batch tools
+
+```sh
+node tools/auto-review.mjs data/cambridge.json data/reference/mapillary.json out.json
+node tools/smooth-corners.mjs data/cambridge.json out.json --in out.json
+node tools/check-map.mjs data/cambridge.json out.json
+```
+
+`auto-review` applies a whole Mapillary export at once, through the same acceptance
+rules the review inspector uses per click; rejections are reported, never forced.
+The count of street lights falling inside a carriageway is a width-error score that
+needs no licence and works for any city.
+
+`smooth-corners` rounds the sharp corners OSM traces as two straight legs. It invents
+geometry and reports how far it moved each road, so the cost stays visible.
+
+`check-map` validates the corrections and checks lamps are clear of carriageways,
+markings sit inside the road they name, and islands avoid centrelines. It exits
+non-zero, so it can gate an export.
 
 ## Validation
 

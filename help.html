@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to use the Road Editor</title>
+<style>
+:root{--bg:#0f1f29;--panel:#fff;--ink:#15303d;--muted:#5d7682;--line:#e2eaee;
+  --go:#16a37f;--warn:#e5705f;--tint:#f2f8f9}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6}
+.wrap{max-width:680px;margin:0 auto;padding:0 16px 80px}
+header{padding:48px 0 28px;text-align:center}
+header h1{color:#eaf4f6;margin:0 0 8px;font-size:30px;letter-spacing:-.3px}
+header p{color:#9fbfc9;margin:0;font-size:17px}
+.card{background:var(--panel);border-radius:20px;padding:26px 26px 22px;margin:16px 0;
+  box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.card h2{margin:0 0 4px;font-size:22px}
+.card h2 .n{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;
+  border-radius:50%;background:var(--go);color:#fff;font-size:17px;margin-right:10px;
+  vertical-align:middle}
+.card p{margin:10px 0}
+.card p.lead{color:var(--muted);margin-top:0}
+ul{margin:10px 0;padding-left:22px}
+li{margin:7px 0}
+kbd{background:var(--tint);border:1px solid var(--line);border-radius:8px;padding:2px 9px;
+  font:inherit;font-weight:600;font-size:15px;white-space:nowrap}
+.note{background:var(--tint);border-left:4px solid var(--go);border-radius:0 12px 12px 0;
+  padding:12px 16px;margin:16px 0}
+.note.warn{border-left-color:var(--warn)}
+.note p{margin:0}
+.go{display:inline-block;background:var(--go);color:#fff;text-decoration:none;
+  padding:14px 26px;border-radius:999px;font-weight:650;font-size:17px;margin-top:6px}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:15px}
+td{padding:9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+td:first-child{font-weight:600;width:44%;padding-right:14px}
+code{background:var(--tint);border-radius:6px;padding:2px 7px;font-size:14px}
+footer{text-align:center;color:#7fa3af;font-size:14px;padding-top:26px}
+footer a{color:#9fd7cb}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>How to use the Road Editor</h1>
+  <p>Change a road, then drive down it. That's the whole idea.</p>
+</header>
+
+<div class="card">
+  <h2><span class="n">1</span>Pick a road</h2>
+  <p class="lead">Open the editor and you're looking down at Cambridge from above.</p>
+  <ul>
+    <li><b>Drag</b> to move around. <b>Scroll</b> or use <kbd>+</kbd> <kbd>−</kbd> to zoom.</li>
+    <li>Road names appear once you've zoomed in a bit.</li>
+    <li><b>Tap a road</b> and it turns green. A card appears with its settings.</li>
+  </ul>
+  <p>Tap the <kbd>×</kbd> or anywhere off the road to close the card.</p>
+</div>
+
+<div class="card">
+  <h2><span class="n">2</span>Change it</h2>
+  <p class="lead">Three things, each with a minus and a plus.</p>
+  <table>
+    <tr><td>How wide?</td><td>How much tarmac there is, kerb to kerb. Goes up and down half a metre at a time.</td></tr>
+    <tr><td>Lanes going one way<br>Lanes coming back</td><td>How many lanes each direction. A one-way street only shows one of these.</td></tr>
+    <tr><td>Round the corners</td><td>Only shows up on roads with a sharp corner. Turns the hard kink into a curve.</td></tr>
+  </table>
+  <p><b>Put it back</b> undoes everything you've done to that one road. <b>Undo</b> at the top steps back through your changes one at a time.</p>
+  <div class="note">
+    <p>Add a lane and the road gets wider on its own, so the lanes actually fit. That's meant to happen.</p>
+  </div>
+  <div class="note warn">
+    <p>If something isn't allowed — like taking away the last lane — it says so and puts it back. Nothing breaks.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2><span class="n">3</span>Drive it</h2>
+  <p class="lead">Press <b>Drive it</b>. The simulator opens in a new tab with your changes already in it.</p>
+  <ul>
+    <li>Pick any lesson or route that uses the road you changed.</li>
+    <li>Changed something else? <b>Reload the driving tab.</b> It only picks up your edits when it loads.</li>
+  </ul>
+  <div class="note warn">
+    <p><b>The one rule that trips people up.</b> Your changes are saved in <i>this browser, on this web address</i>. Edit here and drive here, and it works. Edit on the website and drive on your own computer, and it won't — they're two different places. Use <b>Save a copy</b> to carry work between them.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2><span class="n">4</span>Keep it</h2>
+  <p class="lead">Your work saves by itself as you go. You don't have to press anything.</p>
+  <ul>
+    <li><b>Save a copy</b> downloads <code>my-roads.json</code> — a file with everything you changed.</li>
+    <li>Send that file to someone and they can load it with <b>Import corrections</b> in the full editor.</li>
+    <li>Clearing your browsing data wipes your work. Save a copy first if you care about it.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>When something looks wrong</h2>
+  <table>
+    <tr><td>My changes disappeared</td><td>Different web address, or a private window. Private windows throw everything away when you close them.</td></tr>
+    <tr><td>The driving tab shows the old road</td><td>Reload it.</td></tr>
+    <tr><td>I can't find a road</td><td>Zoom in until names appear. The full editor has a search box.</td></tr>
+    <tr><td>I've made a mess</td><td>Undo, as many times as you need. Or <b>Put it back</b> on each road you touched.</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Want more control?</h2>
+  <p class="lead">The full editor does everything this one does, plus a lot more.</p>
+  <p>Move the road itself, draw islands and central reservations, place street lights, paint crossings and stop lines, and compare against the original. It shares your work with this editor, so you can start here and finish there.</p>
+  <p><a class="go" href="simple.html">Back to the editor</a> &nbsp; <a href="editor.html" style="color:var(--go);font-weight:600">Open the full editor →</a></p>
+</div>
+
+<footer>
+  <p>Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, available under the Open Database Licence.<br>
+  This is a practice map, not a survey. Don't use it to learn a real junction.</p>
+</footer>
+
+</div>
+</body>
+</html>
