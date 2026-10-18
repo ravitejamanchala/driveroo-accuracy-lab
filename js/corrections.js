@@ -19,6 +19,7 @@ export function validateCorrections(c) {
     if (v.points && (!pointsOK(v.points) || v.points.length < 2 || v.points.some((p, i) => i && Math.hypot(p[0] - v.points[i - 1][0], p[1] - v.points[i - 1][1]) < 0.15))) throw Error('Road points must be finite and at least 0.15 metres apart.');
   }
   if (!Array.isArray(c.lamps) || !Array.isArray(c.islands)) throw Error('Expected lamps and islands arrays.');
+  if (c.review !== undefined && (!c.review || !['accepted','dismissed'].every(k=>Array.isArray(c.review[k])&&c.review[k].every(v=>typeof v==='string')))) throw Error('Invalid feature review records.');
   if (c.hiddenLamps !== undefined && (!Array.isArray(c.hiddenLamps) || c.hiddenLamps.some(p => ![p.x,p.z].every(Number.isFinite)))) throw Error('Invalid hidden lamp positions.');
   if (c.markings !== undefined && (!Array.isArray(c.markings) || c.markings.some(m => typeof m.edgeKey !== 'string' || !['dashed','solid','double','zebra','stop'].includes(m.type) || ![m.s,m.offset,m.length,m.width].every(Number.isFinite) || m.s < 0 || m.length < .2 || m.length > 2000 || m.width < .05 || m.width > 2 || Math.abs(m.offset) > 40))) throw Error('Invalid road marking dimensions.');
   for (const p of c.lamps) if (![p.x, p.z].every(Number.isFinite)) throw Error('Invalid lamp coordinates.');

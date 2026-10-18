@@ -133,3 +133,21 @@ The private ChatGPT Site is a review deployment, not a public cross-origin CDN.
 Publish the JSON on Pages or another public static host for independent engines.
 Browser edits are local until exported and committed/uploaded; there are no GitHub
 write tokens or Mapillary secrets in client code.
+
+## Uploaded Mapillary review dataset
+
+`data/reference/mapillary.json` combines the user-supplied point and traffic-sign
+GeoJSON exports: 8,469 detections, including 914 street lights and 1,415 traffic signs,
+covering part of Cambridge (approximately 0.0744–0.1477 E, 52.1918–52.2154 N).
+Records retain Mapillary feature IDs, categories and first/last-seen timestamps.
+These are estimated feature points, not photographs, image IDs, survey measurements
+or road outlines. Last-seen dates span 2010–2026; do not assume all features are current.
+
+The review inspector filters detections, locates them, links to nearby Mapillary
+imagery, and accepts lamps individually with carriageway/duplicate checks. Zebra
+and stop-line suggestions can create provisional markings for manual adjustment.
+Traffic signs and unsupported objects remain reference-only because these exports
+lack reliable facing direction and detailed geometry. Dismiss/accept decisions
+are undoable and included in correction export. Accepted objects retain provenance.
+Map package export also carries loaded reference features for editor round-trips.
+Other GeoJSON exports can be imported through the review inspector.

@@ -109,3 +109,10 @@ test('map package roundtrip preserves edits and rejects unsupported formats and 
   assert.equal(resolveMapURL('maps/v1/map.json','https://example.com/lab/'),'https://example.com/lab/maps/v1/map.json');
   const fetched=await loadMapPackage('https://example.com/map.json',async()=>({ok:true,headers:new Headers(),text:async()=>JSON.stringify(pack)}));assert.equal(fetched.format,'driveroo-map');
 });
+
+test('Mapillary GeoJSON import keeps dates and source IDs without inventing geometry',async()=>{
+ const {importMapillary,acceptLampSuggestion}=await import('../js/mapillary-import.js');
+ const features=importMapillary({type:'FeatureCollection',features:[{geometry:{type:'Point',coordinates:[-8,-20]},properties:{id:123,value:'object--street-light',last_seen_at:1000}},{geometry:{type:'Point',coordinates:[200,0]},properties:{id:124,value:'object--street-light'}}]});
+ assert.equal(features.length,1);assert.equal(features[0].kind,'lamp');assert.equal(features[0].id,'123');assert.equal(features[0].lastSeen,1000);
+ const c=correction(),n=buildNet(fixture());acceptLampSuggestion(n,c,features[0]);assert.equal(c.lamps[0].provenance.featureId,'123');assert.deepEqual(c.review.accepted,['123']);assert.throws(()=>acceptLampSuggestion(n,c,features[0]));assert.throws(()=>acceptLampSuggestion(n,correction(),{...features[0],lon:0}));
+});
