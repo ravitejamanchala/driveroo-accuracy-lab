@@ -119,6 +119,42 @@ $('locateReference').onclick=()=>{const f=currentReference();if(!f)return;const 
 $('dismissReference').onclick=()=>{const f=currentReference();if(f)commit(()=>corrections.review.dismissed.push(f.id));};
 $('acceptReference').onclick=()=>{const f=currentReference();if(f)commit(()=>acceptLampSuggestion(net,corrections,f));};
 $('markReference').onclick=()=>{const f=currentReference();if(!f||f.kind!=='marking')return;const p=locateSuggestion(net,f);if(!p.edge||p.distance>15){status('Detection is too far from the road.');return;}const frame=offsetPoint(p.edge,p.s,0),type=f.value.includes('zebra')?'zebra':f.value.includes('stop-line')?'stop':null;if(!type){status('This detection needs a manually chosen marking type and dimensions. Select Place marking to trace it.');return;}commit(()=>{corrections.markings.push({edgeKey:p.edge.key,s:p.s,offset:(p.x-frame.x)*frame.tz-(p.z-frame.z)*frame.tx,type,length:type==='zebra'?3:1,width:type==='stop'?.35:.14,provenance:{source:'Mapillary',featureId:f.id,lastSeen:f.lastSeen}});corrections.review.accepted.push(f.id);});status('Marking placed with provisional dimensions. Select it to adjust against imagery.');};
+// Apply every pending street light in one go, through the same acceptance rules
+// the single-click button uses, so a bulk run and a hand run cannot disagree.
+// One undo step covers the batch. Rejections are counted, never forced through.
+$('acceptAllLamps').onclick=()=>{
+  const pending=references.filter(f=>f.kind==='lamp'&&!corrections.review.accepted.includes(f.id)&&!corrections.review.dismissed.includes(f.id));
+  if(!pending.length){status('No street lights left to review.');return;}
+  let ok=0;const why={};
+  commit(()=>{for(const f of pending){try{acceptLampSuggestion(net,corrections,f);ok++;}catch(e){why[e.message]=(why[e.message]||0)+1;}}});
+  const skipped=pending.length-ok;
+  const inRoad=Object.entries(why).find(([m])=>m.includes('carriageway'))?.[1]||0;
+  $('checkResult').textContent=skipped?`${ok} accepted, ${skipped} skipped${inRoad?` · ${inRoad} fell inside a carriageway, which usually means the road width is too wide there`:''}.`:`${ok} accepted.`;
+  status(`Accepted ${ok} street light${ok===1?'':'s'} from Mapillary.`);
+};
+
+// Invariants worth checking before an export, in the browser so the loop stays here.
+$('runChecks').onclick=()=>{
+  const problems=[];
+  try{validateCorrections(corrections);}catch(e){problems.push(`Corrections: ${e.message}`);}
+  // A lamp can be fine when placed and inside a road after a later width edit.
+  const inRoad=[];
+  for(const p of corrections.lamps)if(!roadClear(net,p.x,p.z,.3))inRoad.push(nearest(net,p.x,p.z)?.way.name||'an unnamed road');
+  if(inRoad.length)problems.push(`${inRoad.length} lamp${inRoad.length===1?'':'s'} stand in a carriageway (${[...new Set(inRoad)].slice(0,3).join(', ')}).`);
+  for(const m of corrections.markings){
+    const e=net.edges.find(e=>e.key===m.edgeKey);
+    if(!e)problems.push('A marking names a road that is not in this map.');
+    else if(m.s>e.len)problems.push(`A marking sits past the end of ${e.way.name||'a road'}.`);
+  }
+  for(const island of corrections.islands)
+    for(const e of net.edges){
+      let hit=false;for(let i=0;i<e.n&&!hit;i++)if(pointInPolygon(e.px[i],e.pz[i],island.points))hit=true;
+      if(hit){problems.push(`A divider sits on the centreline of ${e.way.name||'a road'}; traffic will drive through it.`);break;}
+    }
+  $('checkResult').textContent=problems.length?problems.join(' '):`All checks passed · ${corrections.lamps.length} lamps, ${corrections.markings.length} markings, ${corrections.islands.length} dividers.`;
+  status(problems.length?`${problems.length} problem${problems.length===1?'':'s'} to fix before export.`:'All checks passed.');
+};
+
 $('importReference').onclick=()=>$('referenceFile').click();$('referenceFile').onchange=async()=>{try{const f=$('referenceFile').files[0];if(f){loadReferences(importMapillary(JSON.parse(await f.text())));status('Mapillary detections imported as suggestions. Export a map package to retain imported references.');}}catch(e){status(e.message);}$('referenceFile').value='';};
 $('deleteObject').onclick=removeSelection;
 $('applyObject').onclick=()=>commit(()=>{if(selection.type==='marking')Object.assign(corrections.markings[selection.index],{type:$('markType').value,length:Number($('markLength').value),width:Number($('markWidth').value)});else if(selection.type==='island')corrections.islands[selection.index].height=Number($('dividerHeight').value);else status('Properties will be used for the next object.');});
