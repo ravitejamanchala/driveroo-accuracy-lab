@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Road Editor</title>
+<style>
+:root{
+  --bg:#0f1f29; --panel:#ffffff; --ink:#15303d; --muted:#5d7682;
+  --line:#dfe8ec; --go:#16a37f; --go-dark:#0e7a5f; --warn:#e5705f; --pick:#2bbfa6;
+  --shadow:0 10px 40px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
+  -webkit-text-size-adjust:100%}
+#map{position:fixed;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+#map.grabbing{cursor:grabbing}
+
+/* ---------- top bar ---------- */
+header{position:fixed;top:0;left:0;right:0;display:flex;gap:10px;align-items:center;
+  padding:12px 14px;background:linear-gradient(#0f1f29ee,#0f1f2900);pointer-events:none}
+header h1{margin:0;font-size:17px;color:#eaf4f6;font-weight:650;letter-spacing:.2px;
+  flex:1;text-shadow:0 1px 3px #0008}
+header .actions{display:flex;gap:8px;pointer-events:auto}
+.btn{appearance:none;border:0;border-radius:999px;padding:12px 18px;font-size:15px;
+  font-weight:600;font-family:inherit;cursor:pointer;background:var(--panel);color:var(--ink);
+  box-shadow:var(--shadow);min-height:46px;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn.go{background:var(--go);color:#fff}
+.btn:disabled{opacity:.45;cursor:default}
+
+/* ---------- zoom ---------- */
+#zoom{position:fixed;right:14px;top:50%;transform:translateY(-50%);display:flex;
+  flex-direction:column;gap:8px}
+#zoom .btn{width:52px;height:52px;padding:0;font-size:24px;line-height:1}
+
+/* ---------- the card ---------- */
+#card{position:fixed;left:50%;bottom:16px;transform:translateX(-50%) translateY(140%);
+  width:min(560px,calc(100vw - 24px));background:var(--panel);border-radius:22px;
+  box-shadow:var(--shadow);padding:18px 18px 16px;transition:transform .22s ease}
+#card.up{transform:translateX(-50%) translateY(0)}
+#card h2{margin:0 0 2px;font-size:20px;font-weight:700}
+#card .sub{margin:0 0 14px;color:var(--muted);font-size:14px}
+.control{display:flex;align-items:center;gap:12px;margin:12px 0}
+.control .label{flex:1;font-size:16px;font-weight:600}
+.control .value{min-width:84px;text-align:center;font-size:17px;font-weight:700;
+  font-variant-numeric:tabular-nums}
+.step{width:50px;height:50px;border-radius:16px;border:2px solid var(--line);
+  background:#f7fafb;font-size:26px;font-weight:700;line-height:1;cursor:pointer;
+  color:var(--ink);font-family:inherit}
+.step:active{background:#eaf2f4}
+.step:disabled{opacity:.35;cursor:default}
+#extra{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--line)}
+#extra .btn{box-shadow:none;border:2px solid var(--line);background:#f7fafb;
+  padding:10px 14px;font-size:14px}
+#close{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;
+  border:0;background:#f0f5f6;font-size:20px;cursor:pointer;color:var(--muted);line-height:1}
+
+/* ---------- hint + toast ---------- */
+#hint{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);color:#cfe3e8;
+  background:#0f1f29cc;padding:11px 20px;border-radius:999px;font-size:15px;
+  pointer-events:none;transition:opacity .2s}
+#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%) translateY(-20px);
+  background:#07131a;color:#fff;padding:12px 22px;border-radius:999px;font-size:15px;
+  font-weight:600;opacity:0;transition:all .2s;pointer-events:none;
+  box-shadow:0 8px 28px #0009;border:1px solid #ffffff2e}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.bad{background:var(--warn)}
+@media (max-width:560px){
+  header h1{font-size:15px}
+  .btn{padding:11px 14px;font-size:14px}
+  #zoom{bottom:calc(100% - 180px);top:auto;transform:none}
+}
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+
+<header>
+  <h1>Road Editor</h1>
+  <div class="actions">
+    <a class="btn" href="editor.html" style="text-decoration:none;display:inline-flex;align-items:center">All the controls</a>
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn" id="save">Save a copy</button>
+    <button class="btn go" id="drive">Drive it</button>
+  </div>
+</header>
+
+<div id="zoom">
+  <button class="btn" id="zin" aria-label="Zoom in">+</button>
+  <button class="btn" id="zout" aria-label="Zoom out">−</button>
+</div>
+
+<div id="hint">Tap a road to change it</div>
+<div id="toast" role="status"></div>
+
+<section id="card" aria-label="Road settings">
+  <button id="close" aria-label="Close">×</button>
+  <h2 id="name">Road</h2>
+  <p class="sub" id="sub"></p>
+
+  <div class="control">
+    <span class="label">How wide?</span>
+    <button class="step" id="wNarrow" aria-label="Narrower">−</button>
+    <span class="value" id="wVal">9.6 m</span>
+    <button class="step" id="wWide" aria-label="Wider">+</button>
+  </div>
+
+  <div class="control">
+    <span class="label">Lanes going one way</span>
+    <button class="step" id="fDown" aria-label="One fewer lane">−</button>
+    <span class="value" id="fVal">2</span>
+    <button class="step" id="fUp" aria-label="One more lane">+</button>
+  </div>
+
+  <div class="control" id="backRow">
+    <span class="label">Lanes coming back</span>
+    <button class="step" id="bDown" aria-label="One fewer lane">−</button>
+    <span class="value" id="bVal">1</span>
+    <button class="step" id="bUp" aria-label="One more lane">+</button>
+  </div>
+
+  <div id="extra">
+    <button class="btn" id="round">Round the corners</button>
+    <button class="btn" id="reset">Put it back</button>
+  </div>
+</section>
+
+<script type="module" src="js/simple.js"></script>
+</body>
+</html>
