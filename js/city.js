@@ -1,6 +1,7 @@
 // Stylised city dressing for each 400 m chunk: houses with pitched roofs, shops with awnings,
 // taller blocks with rooftop gardens, street lamps and trees. Everything is instanced per chunk.
 import { posAt, nearest } from './net.js';
+import { lampPlacements } from './street-furniture.js';
 
 const T = THREE;
 const pick = (R, a) => a[Math.floor(R() * a.length)];
@@ -101,11 +102,6 @@ export function buildChunkContent(net, edges, cx, cz, C, R) {
   for (const e of edges) {
     const cls = e.way.cls; if (/trunk/.test(cls) || e.way.rb) continue;
     const main = /^(primary|secondary|tertiary)/.test(cls);
-    // street lamps on main roads
-    if (main) for (let s = 10, i = 0; s < e.len - 6; s += 34, i++) {
-      const p = posAt(e, s), side = i % 2 ? 1 : -1, o = e.way.w / 2 + 0.9, x = p.x + p.tz * side * o, z = p.z - p.tx * side * o;
-      if (inChunk(x, z)) lamps.push([x, z, -p.tz * side, p.tx * side]); // last two: direction from pole towards the road
-    }
     for (const side of [-1, 1]) {
       let s = 5;
       while (s < e.len - 5) {
@@ -148,6 +144,7 @@ export function buildChunkContent(net, edges, cx, cz, C, R) {
       }
     }
   }
+  for (const p of lampPlacements(net, edges, { cx, cz, size: C })) lamps.push([p.x, p.z, p.dx, p.dz]);
   const M = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), V = new T.Vector3(), S = new T.Vector3(), col = new T.Color();
   function inst(geo, mat, list, setup, shadow = true) {
     if (!list.length) return;

@@ -1,6 +1,6 @@
 // Learner profiles and progress, stored in this browser (localStorage).
 // Swap `load`/`save` for a backend (Supabase, Firebase) later to sync accounts across devices.
-const KEY = 'cambridge-learner-drive.v1';
+const KEY = 'driveroo-accuracy-lab:profiles:v1';
 let mem = { profiles: [], current: null };
 
 function load() {

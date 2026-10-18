@@ -1,5 +1,7 @@
 // Road network: decodes the map file, answers "where am I on the road?", routes, and writes examiner instructions.
 
+import { roadFrame } from './road-geometry.js';
+import { applyCorrections, edgeKey } from './corrections.js';
 const CELL = 40;
 const ck = (cx, cz) => (cx + 4000) * 8192 + (cz + 4000);
 
@@ -9,17 +11,18 @@ export async function loadNet(url) {
   return buildNet(await r.json());
 }
 
-export function buildNet(d) {
+export function buildNet(source, corrections) {
+  const d = applyCorrections(source, corrections);
   const net = { origin: d.origin, kx: d.kx, kz: d.kz, names: d.names, chunkSize: 400 };
   // cl/cr: cycle lane on the left/right of the way's direction (0 none, 1 advisory, 2 mandatory, 3 separate track); cw: lane width
-  const ways = d.ways.map(w => ({ name: d.names[w[0]], cls: d.classes[w[1]], mph: w[2], assumed: !!w[3], oneway: w[4], w: w[5], rb: !!w[6], lanes: w[7], cl: w[8] || 0, cr: w[9] || 0, cw: (w[10] || 15) / 10 }));
+  const ways = d.ways.map(w => ({ name: d.names[w[0]], cls: d.classes[w[1]], mph: w[2], assumed: !!w[3], oneway: w[4], w: w[5], rb: !!w[6], lanes: w[7], cl: w[8] || 0, cr: w[9] || 0, cw: (w[10] || 15) / 10, meta: w[11] || {} }));
   const nN = d.nodes.length / 2;
   const nx = new Float32Array(nN), nz = new Float32Array(nN);
   for (let i = 0; i < nN; i++) { nx[i] = d.nodes[2 * i] / 10; nz[i] = d.nodes[2 * i + 1] / 10; }
   const edges = d.edges.map(([a, b, wi, f], id) => {
     const n = f.length / 2, px = new Float32Array(n), pz = new Float32Array(n), cum = new Float32Array(n);
     for (let i = 0; i < n; i++) { px[i] = f[2 * i] / 10; pz[i] = f[2 * i + 1] / 10; if (i) cum[i] = cum[i - 1] + Math.hypot(px[i] - px[i - 1], pz[i] - pz[i - 1]); }
-    return { id, a, b, way: ways[wi], px, pz, cum, len: Math.max(cum[n - 1], 0.01), n };
+    return { id, key: edgeKey(source, source.edges[id]), a, b, way: ways[wi], px, pz, cum, len: Math.max(cum[n - 1], 0.01), n };
   });
   const out = Array.from({ length: nN }, () => []), inc = Array.from({ length: nN }, () => []);
   for (const e of edges) {
@@ -55,6 +58,9 @@ export function buildNet(d) {
   net.giveways = d.giveways.map(([ei, s, dir, stop]) => feature(net, { e: edges[ei], s: s / 10, dir, stop: !!stop }));
   net.minis = d.minis.map(([x, z]) => ({ x: x / 10, z: z / 10 }));
   net.rbs = d.rbs.map(([x, z, r, w]) => ({ x: x / 10, z: z / 10, r: r / 10, w: w / 10 }));
+  net.lamps = (d.lamps || []).map(([x, z]) => ({ x: x / 10, z: z / 10, source: 'mapped' })).concat((d.manualLamps || []).map(p => ({ ...p, source: 'manual' })));
+  net.islands = d.islands || [];
+  net.proceduralLamps = corrections?.proceduralLamps !== false;
   net.stopsByEdge = new Map(); net.zebrasByEdge = new Map();
   for (const s of net.stops) push(net.stopsByEdge, s.e.id, s);
   for (const z of net.zebras) push(net.zebrasByEdge, z.e.id, z);
@@ -81,9 +87,9 @@ export function posAt(e, s) {
 }
 // position travelling along edge in `dir`, `ts` metres from the start of travel, offset to the traveller's left
 export function along(e, ts, dir, off = 0) {
-  const p = posAt(e, dir > 0 ? ts : e.len - ts);
+  const p = roadFrame(e, dir > 0 ? ts : e.len - ts);
   const tx = p.tx * dir, tz = p.tz * dir;
-  return { x: p.x + tz * off, z: p.z - tx * off, tx, tz };
+  return { x: p.x + p.nx * dir * off, z: p.z + p.nz * dir * off, tx, tz };
 }
 // ---------- lanes ----------
 // Offsets are measured to the traveller's left of the road centreline.
@@ -91,9 +97,22 @@ export const cycleLeft = (e, dir) => dir > 0 ? e.way.cl : e.way.cr;
 const isLane = (c) => c === 1 || c === 2;
 export function laneInfo(e, dir) {
   const w = e.way, cyc = isLane(cycleLeft(e, dir)) ? w.cw : 0;
-  const n = w.oneway ? Math.max(1, w.lanes || (w.w > 7.6 && !w.rb ? 2 : 1)) : Math.max(1, Math.floor((w.lanes || 2) / 2));
-  const inner = w.oneway ? -w.w / 2 : 0, outer = w.w / 2 - cyc;
-  return { n, inner, outer, laneW: (outer - inner) / n, cyc };
+  const meta = w.meta || {}, total = w.lanes || 2;
+  let nf = meta.lanesForward, nb = meta.lanesBackward;
+  const known = Number.isInteger(nf) && Number.isInteger(nb);
+  if (w.oneway) { nf = nf || w.lanes || (w.w > 7.6 && !w.rb ? 2 : 1); nb = 0; }
+  else {
+    if (!Number.isInteger(nf) && Number.isInteger(nb)) nf = Math.max(1, total - nb);
+    if (!Number.isInteger(nb) && Number.isInteger(nf)) nb = Math.max(1, total - nf);
+    // Unknown odd counts retain the lane but are explicitly inferred, never survey data.
+    nf = Math.max(1, nf ?? Math.ceil(total / 2)); nb = Math.max(1, nb ?? Math.floor(total / 2));
+  }
+  const cf = isLane(w.cl) ? w.cw : 0, cb = isLane(w.cr) ? w.cw : 0;
+  const motor = Math.max(0.5, w.w - cf - cb), laneW = motor / (nf + nb);
+  const boundary = w.oneway ? -w.w / 2 + cb : w.w / 2 - cf - nf * laneW;
+  const n = dir > 0 ? nf : nb;
+  const inner = w.oneway ? -w.w / 2 + cb : boundary * dir, outer = w.w / 2 - cyc;
+  return { n: Math.max(1, n), inner, outer, laneW: (outer - inner) / Math.max(1, n), cyc, boundary, inferred: !known };
 }
 // centre of lane i (0 = nearest the kerb)
 export function laneCentre(e, dir, i = 0) {

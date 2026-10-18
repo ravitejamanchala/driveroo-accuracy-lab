@@ -13,6 +13,7 @@ import { createScenario, evaluate } from './course.js';
 import { createMirrors } from './mirrors.js';
 import { createGuide } from './guide.js';
 import { STAR } from './icons.js';
+import { DRAFT_KEY, validateCorrections } from './corrections.js';
 
 const T = THREE, $ = id => document.getElementById(id);
 const shadowed = (o) => { o.traverse(c => { if (c.isMesh) c.castShadow = true; }); return o; };
@@ -21,7 +22,12 @@ const setLoad = (msg) => { const el = $('loadMsg'); if (el) el.textContent = msg
 
 async function boot() {
   if (!window.THREE) throw new Error('The 3D library did not load. Check your connection and reload.');
-  setLoad('Loading…');
+  setLoad('Loading accuracy experiment…');
+  const correctionResponse = await fetch('data/corrections.json');
+  if (!correctionResponse.ok) throw Error('Corrections did not load');
+  let corrections = validateCorrections(await correctionResponse.json());
+  const draft = localStorage.getItem(DRAFT_KEY);
+  if (draft) corrections = validateCorrections(JSON.parse(draft));
   const ix = await fetch(AREAS_URL + 'index.json'); if (!ix.ok) throw new Error('Map index did not load (' + ix.status + ')');
   const index = await ix.json();
   const meta = (key) => index.plans[key] || { len: 0, n: 0, first: '' };
@@ -63,7 +69,7 @@ async function boot() {
       await new Promise(res => setTimeout(res, 16));
       if (A.test) A.test.running = false;
       const old = scene; scene = new T.Scene(); scene.add(camera, player.mesh, guide.group); carI = bikeI = 0;
-      const net = buildNet(d);
+      const net = buildNet(d, corrections);
       const traffic = createTraffic(net, scene, makeCar, makeBk);
       const world = buildWorld(scene, net, traffic); world.setShadows(shadowsOn);
       const test = createTest(net, traffic, player);
@@ -114,8 +120,8 @@ async function boot() {
   }
   const hub = createHub({ meta, onPick: (pl) => pickPlan(pl, false), onStart: (pl) => pickPlan(pl, true) });
   const setMode = (m) => { document.body.dataset.mode = m; camInit = false; layoutSoon(); };
-  const prefs = (() => { try { return JSON.parse(localStorage.getItem('cambridge-learner-drive.prefs') || '{}'); } catch (_) { return {}; } })();
-  const savePrefs = () => { try { localStorage.setItem('cambridge-learner-drive.prefs', JSON.stringify(prefs)); } catch (_) {} };
+  const prefs = (() => { try { return JSON.parse(localStorage.getItem('driveroo-accuracy-lab:prefs:v1') || '{}'); } catch (_) { return {}; } })();
+  const savePrefs = () => { try { localStorage.setItem('driveroo-accuracy-lab:prefs:v1', JSON.stringify(prefs)); } catch (_) {} };
 
   loadCarModel(CAR.url).then(m => { player.setModel(shadowed(m)); }).catch(err => console.warn('Car model did not load; using the placeholder car.', err));
 

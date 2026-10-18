@@ -1,6 +1,7 @@
 // The examiner: follows progress along the route, re-routes when you go off it, and marks faults DVSA-style.
+import { pointInPolygon } from './road-geometry.js';
 import { MARKING, RULES } from './config.js';
-import { nearest, stopsNear, buildRoute, laneIndex } from './net.js';
+import { nearest, stopsNear, buildRoute, laneIndex, laneInfo } from './net.js';
 
 const MPH = 2.23694;
 
@@ -73,11 +74,12 @@ export function createTest(net, traffic, player) {
     if (way.oneway && timer('ww', v > 2 && along < -0.4, dt) > 0.8) t.fault('S', way.rb ? 'Positioning – roundabout' : 'Response to signs', way.rb ? 'Went the wrong way round the roundabout' : 'Drove the wrong way along a one-way road', 'ww', 12);
     if (!way.oneway && nr.d < way.w / 2 + 1) {
       const offL = nr.lat * (Math.sign(along) || 1);
-      if (timer('pos', v > 2 && offL < -0.5, dt) > 1.4) t.fault('D', 'Positioning – normal driving', 'Drove on the right-hand side of the road', 'pos', 8);
+      if (timer('pos', v > 2 && offL < laneInfo(nr.e, Math.sign(along) || 1).inner - 0.5, dt) > 1.4) t.fault('D', 'Positioning – normal driving', 'Drove on the right-hand side of the road', 'pos', 8);
     } else timer('pos', false, dt);
     // kerb
     if (nr.d > way.w / 2 + 0.8) { if (!t.flags.kerb && Math.abs(v) > 1.2) { t.flags.kerb = true; t.fault('D', 'Control – steering', 'Mounted the kerb', 'kerb', 4); } }
     else if (nr.d < way.w / 2) t.flags.kerb = false;
+    if (net.islands.some(i => pointInPolygon(player.x, player.z, i.points)) && Math.abs(v) > 1.2) t.fault('D', 'Control – steering', 'Drove over a mapped traffic island or reservation', 'island', 4);
     // roundabout entry
     if (way.rb && !t.onRb && v > 3.2) {
       const busy = traffic.cars.concat(traffic.bikes).some(c => c.alive && c.e.way.rb && Math.hypot(c.x - player.x, c.z - player.z) < 20 && ((player.x - c.x) * -Math.sin(c.th) + (player.z - c.z) * -Math.cos(c.th)) > 0);
@@ -105,7 +107,7 @@ export function createTest(net, traffic, player) {
       const rx = player.x - st.x, rz = player.z - st.z, a = rx * st.tx + rz * st.tz, lat = rx * st.tz - rz * st.tx;
       const prev = t.stopPrev.get(st.id); t.stopPrev.set(st.id, a);
       if (prev === undefined || Math.abs(a) > 30) continue;
-      if (prev < 0 && a >= 0 && fx * st.tx + fz * st.tz > 0.3 && lat > (st.e.way.oneway ? -st.w / 2 - 0.5 : -0.8) && lat < st.w / 2 + 0.8) {
+      if (prev < 0 && a >= 0 && fx * st.tx + fz * st.tz > 0.3 && lat > laneInfo(st.e, st.dir).inner - 0.8 && lat < laneInfo(st.e, st.dir).outer + 0.8) {
         const L = traffic.lightState(st);
         if (L === 'R' || L === 'RA') t.fault('S', 'Response to signals – traffic lights', 'Crossed the stop line on a red light', 'red' + st.cluster, 6);
         else if (L === 'A') t.fault('D', 'Response to signals – traffic lights', 'Went through on amber when there was time to stop', 'amb' + st.cluster, 6);
@@ -177,7 +179,7 @@ export function createTest(net, traffic, player) {
     const last = t.route.instructions[t.route.instructions.length - 1];
     if (t.step >= t.route.instructions.length - 1 && t.sRoute > last.s - 60 && Math.abs(v) < 0.3) {
       const offL = nr.lat * (way.oneway ? 1 : (Math.sign(along) || 1));
-      if (offL > (way.oneway ? -0.5 : 0.3)) finish();
+      if (offL > (way.oneway ? -0.5 : laneInfo(nr.e, Math.sign(along) || 1).inner + 0.3)) finish();
     }
   };
   function finish() { t.running = false; t.done = true; t.onFinish && t.onFinish(); }

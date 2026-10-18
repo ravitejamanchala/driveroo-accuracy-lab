@@ -73,6 +73,7 @@ groups.forEach((g, gi) => {
     version: full.version, source: full.source, origin: full.origin, kx: full.kx, kz: full.kz, classes: full.classes,
     area: { id, box: b.map(Math.round) }, names, ways, nodes, edges,
     stops: remap(full.stops), zebras: remap(full.zebras), giveways: remap(full.giveways),
+    lamps: (full.lamps || []).filter(([x, z]) => inBox(b, x / 10, z / 10)),
     minis: full.minis.filter(([x, z]) => inBox(b, x / 10, z / 10)), rbs: full.rbs.filter(([x, z]) => inBox(b, x / 10, z / 10))
   };
   const file = id + '.json', txt = JSON.stringify(area);

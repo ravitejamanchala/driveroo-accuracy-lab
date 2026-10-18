@@ -1,0 +1,10 @@
+{
+  "name": "driveroo-accuracy-lab",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node --test tests/*.test.mjs && python3 -m unittest discover -s tests -p 'test_*.py'",
+    "split": "node tools/split_areas.mjs"
+  }
+}

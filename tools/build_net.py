@@ -3,7 +3,7 @@
 Usage: python3 -I build_net.py export.geojson out.json
 Output coordinates are decimetres on a local plane: x = east, z = south, origin at the data centre.
 """
-import json, math, sys, collections
+import json, math, sys, collections, re
 
 SRC, OUT = sys.argv[1], sys.argv[2]
 F = json.load(open(SRC))['features']
@@ -37,6 +37,15 @@ def mph(v, cls):
 # ---- ways ----
 names = {'': 0}; nameList = ['']
 ways = []; wayCoords = []
+def number(value):
+    try:
+        match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(?:m)?\s*", str(value))
+        return float(match.group(1)) if match else None
+    except (ValueError, TypeError): return None
+def count(value):
+    n = number(value)
+    return int(n) if n is not None and n.is_integer() and 0 <= n <= 16 else None
+
 for f in F:
     g = f['geometry']; p = f['properties']
     if g['type'] != 'LineString' or p.get('highway') not in ROAD: continue
@@ -58,7 +67,8 @@ for f in F:
     for k in ('cycleway:left:width', 'cycleway:right:width', 'cycleway:both:width', 'cycleway:width'):
         try: cw = max(1.2, min(2.2, float(p[k]))); break
         except (KeyError, ValueError): pass
-    if oneway == -1: coords.reverse(); oneway = 1; cl, cr = cr, cl
+    reversed_way = oneway == -1
+    if reversed_way: coords.reverse(); oneway = 1; cl, cr = cr, cl
     lanes = 0
     try: lanes = int(str(p.get('lanes', '0')).split(';')[0])
     except ValueError: pass
@@ -71,7 +81,22 @@ for f in F:
     if nm not in names: names[nm] = len(nameList); nameList.append(nm)
     sp, assumed = mph(p.get('maxspeed'), cls)
     if (cl in (1, 2) or cr in (1, 2)) and not lanes: w = max(w, 7 + cw * ((cl in (1, 2)) + (cr in (1, 2))) * 0.6)
-    ways.append([names[nm], ROAD.index(cls), sp, assumed, oneway, round(w, 1), rb, lanes, cl, cr, round(cw * 10)])
+    explicit_width = number(p.get('width'))
+    if explicit_width is not None and 2 <= explicit_width <= 40: w = explicit_width
+    nf, nb = count(p.get('lanes:forward')), count(p.get('lanes:backward'))
+    tf, tb = p.get('turn:lanes:forward'), p.get('turn:lanes:backward')
+    if reversed_way: nf, nb, tf, tb = nb, nf, tb, tf
+    if oneway:
+        nf, nb = nf or lanes or None, 0
+        tf = tf or p.get('turn:lanes')
+    elif lanes:
+        if nf is not None and nb is None: nb = max(1, lanes - nf)
+        if nb is not None and nf is None: nf = max(1, lanes - nb)
+    meta = {'osmId': str(p.get('@id') or f.get('id') or ''),
+            'widthSource': 'mapped' if explicit_width is not None and 2 <= explicit_width <= 40 else 'inferred',
+            'lanesForward': nf, 'lanesBackward': nb,
+            'turnForward': tf.split('|') if tf else None, 'turnBackward': tb.split('|') if tb else None}
+    ways.append([names[nm], ROAD.index(cls), sp, assumed, oneway, round(w, 1), rb, lanes, cl, cr, round(cw * 10), meta])
     wayCoords.append(coords)
 
 # ---- graph vertices: shared nodes, endpoints ----
@@ -104,7 +129,7 @@ for wi, cs in enumerate(wayCoords):
             if len(seg) >= 2 and not (len(seg) == 2 and seg[0] == seg[1]):
                 ei = len(edges); xz = [proj(*c) for c in seg]
                 for c, p in zip(seg, xz): coordEdge.setdefault(c, []).append((ei, p))
-                edges.append([vid(seg[0]), vid(seg[-1]), wi, dp(xz, 0.6)])
+                edges.append([vid(seg[0]), vid(seg[-1]), wi, dp(xz, 0.15)])
             start = i
 
 def length(pts): return sum(math.hypot(pts[i+1][0]-pts[i][0], pts[i+1][1]-pts[i][1]) for i in range(len(pts)-1))
@@ -127,13 +152,15 @@ def bearing_at(pts, s, d):
         acc += L
 
 # ---- point features ----
-stops = []; zebras = []; giveways = []; minis = []
+stops = []; zebras = []; giveways = []; minis = []; lamps = []
 sigPts = []
 def feat_edges(c): return coordEdge.get(key(c), [])
 for f in F:
     g = f['geometry']; p = f['properties']
     if g['type'] != 'Point': continue
     hw = p.get('highway'); c = g['coordinates']; on = feat_edges(c)
+    if hw == 'street_lamp':
+        lx, lz = proj(*key(c)); lamps.append([round(lx * 10), round(lz * 10)]); continue
     if not on: continue
     xz = proj(*key(c))
     if hw == 'traffic_signals' or (hw == 'crossing' and p.get('crossing') in ('traffic_signals', 'controlled')):
@@ -222,13 +249,13 @@ for k, pts in comp.items():
     w = max(compW[k]); rbs.append([round(cx*10), round(cz*10), round(r*10), round(w*10)])
 
 out = {
-    'version': 1, 'source': 'OpenStreetMap contributors (ODbL), via Overpass Turbo export',
+    'version': 2, 'source': 'OpenStreetMap contributors (ODbL), via Overpass Turbo export',
     'origin': [LAT0, LON0], 'kx': KX, 'kz': KZ,
     'classes': ROAD, 'names': nameList,
     'ways': ways,
     'nodes': [v for c in vlist for v in (round(proj(*c)[0]*10), round(proj(*c)[1]*10))],
     'edges': [[a, b, wi, [round(v*10) for p in pts for v in p]] for a, b, wi, pts in edges],
-    'stops': out_stops, 'zebras': zebras, 'giveways': giveways, 'minis': minis, 'rbs': rbs,
+    'stops': out_stops, 'zebras': zebras, 'giveways': giveways, 'minis': minis, 'rbs': rbs, 'lamps': lamps,
 }
 json.dump(out, open(OUT, 'w'), separators=(',', ':'))
 print('ways', len(ways), 'nodes', len(vlist), 'edges', len(edges), 'stops', len(out_stops), 'clusters', nc,

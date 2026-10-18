@@ -89,7 +89,7 @@ export function buildSigns(scene, net) {
   };
   // double broken give-way line across the traveller's half of the road
   const giveWayLine = (e, ts, dir) => {
-    const w = e.way.w, o1 = e.way.oneway ? -w / 2 + 0.3 : 0.2, o2 = w / 2 - 0.3;
+    const w = e.way.w, o1 = laneInfo(e, dir).inner + 0.2, o2 = laneInfo(e, dir).outer - 0.3;
     for (const back of [0, 0.75]) for (let o = o1; o < o2; o += 1) {
       const a = along(e, ts - back, dir), b2 = Math.min(o + 0.55, o2), nx = a.tz, nz = -a.tx, th = 0.22;
       quad([[a.x + nx * o, a.z + nz * o], [a.x + nx * b2, a.z + nz * b2], [a.x + nx * b2 - a.tx * th, a.z + nz * b2 - a.tz * th], [a.x + nx * o - a.tx * th, a.z + nz * o - a.tz * th]]);
@@ -133,6 +133,12 @@ export function buildSigns(scene, net) {
           let k = 'ahead';
           if (i === 0) k = left && ahead ? 'aheadleft' : left ? 'left' : 'ahead';
           if (i === L.n - 1) k = hasRb ? 'right' : right && ahead ? 'aheadright' : right ? 'right' : 'ahead';
+          const turns = ad > 0 ? e.way.meta?.turnForward : e.way.meta?.turnBackward;
+          if (turns && turns.length === L.n) {
+            const kinds = { through: 'ahead', left: 'left', right: 'right', 'left;through': 'aheadleft', 'through;left': 'aheadleft', 'through;right': 'aheadright', 'right;through': 'aheadright' };
+            k = kinds[turns[i]];
+            if (!k) continue; // Do not replace an unsupported mapped arrow with a guess.
+          }
           for (const back of [10, 32]) paint(arrowB(k), e, e.len - stopDist - back, ad, laneCentre(e, ad, i), 1.1, 4.5);
         }
       }

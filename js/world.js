@@ -4,6 +4,7 @@ import { WORLD } from './config.js';
 import { posAt, laneInfo } from './net.js';
 import { buildChunkContent } from './city.js';
 import { buildSigns } from './signs.js';
+import { ribbonQuads, pointInPolygon } from './road-geometry.js';
 
 const T = THREE;
 
@@ -18,16 +19,7 @@ class Acc {
 }
 // ribbon along an edge polyline, offsets o1..o2 from centreline (left positive)
 function ribbon(acc, e, o1, o2, y, s0 = 0, s1 = e.len) {
-  const pts = [];
-  for (let i = 0; i < e.n; i++) if (e.cum[i] > s0 && e.cum[i] < s1) pts.push(i);
-  const P = [posAt(e, s0)]; for (const i of pts) { const a = posAt(e, e.cum[i] - 0.01), b = posAt(e, e.cum[i] + 0.01); P.push({ x: e.px[i], z: e.pz[i], tx: (a.tx + b.tx) / 2, tz: (a.tz + b.tz) / 2 }); }
-  P.push(posAt(e, s1));
-  for (let i = 0; i < P.length - 1; i++) {
-    const p = P[i], q = P[i + 1];
-    const pl = Math.hypot(p.tx, p.tz) || 1, ql = Math.hypot(q.tx, q.tz) || 1;
-    const pnx = p.tz / pl, pnz = -p.tx / pl, qnx = q.tz / ql, qnz = -q.tx / ql;
-    acc.quad(p.x + pnx * o1, p.z + pnz * o1, p.x + pnx * o2, p.z + pnz * o2, q.x + qnx * o2, q.z + qnz * o2, q.x + qnx * o1, q.z + qnz * o1, y);
-  }
+  for (const [a, b, c, d] of ribbonQuads(e, o1, o2, s0, s1)) acc.quad(a.x, a.z, b.x, b.z, c.x, c.z, d.x, d.z, y);
 }
 function flatMat(c, order) { const m = new T.MeshLambertMaterial({ color: c, side: T.DoubleSide }); m.depthWrite = false; return m; }
 
@@ -64,7 +56,7 @@ export function buildWorld(scene, net, traffic) {
         for (let k = 1; k < L.n; k++) { const o = (L.outer - L.laneW * k) * dir; for (let s = 8; s < e.len - 8; s += 9) dash(white, e, s, 3, o, 0.07); }
       }
       // centre line on two-way main roads, kept clear of junctions
-      if (!wy.oneway && (/^(primary|secondary|tertiary|trunk)/.test(wy.cls) || wy.lanes >= 2)) for (let s = 9; s < e.len - 9; s += 9) dash(white, e, s, 3.2, 0, 0.07);
+      if (!wy.oneway && (/^(primary|secondary|tertiary|trunk)/.test(wy.cls) || wy.lanes >= 2)) for (let s = 9; s < e.len - 9; s += 9) dash(white, e, s, 3.2, laneInfo(e, 1).boundary, 0.07);
     }
     // cycle lanes: red surface, solid edge line if mandatory, long dashes if advisory, bike symbols
     for (const [code, side] of [[wy.cl, 1], [wy.cr, -1]]) {
@@ -76,10 +68,10 @@ export function buildWorld(scene, net, traffic) {
       for (let s = 12; s < e.len - 6; s += 40) { const p = posAt(e, s); const o = side * (w / 2 - wy.cw / 2); bikeMarks.push([p.x + p.tz * o, p.z - p.tx * o, Math.atan2(-p.tx * side, -p.tz * side)]); }
     }
   }
-  for (const st of net.stops) bar(accFor(st.x, st.z).white, st, st.e.way.oneway ? -st.w / 2 + 0.3 : 0.2, st.w / 2 - 0.3, 0.35);
+  for (const st of net.stops) bar(accFor(st.x, st.z).white, st, laneInfo(st.e, st.dir).inner + 0.2, laneInfo(st.e, st.dir).outer - 0.3, 0.35);
   for (const g of net.giveways) {
     const white = accFor(g.x, g.z).white;
-    for (const back of [0, 0.7]) for (let o = 0.3; o < g.w / 2 - 0.3; o += 1) bar(white, g, o, Math.min(o + 0.55, g.w / 2 - 0.3), 0.25, back);
+    for (const back of [0, 0.7]) for (let o = laneInfo(g.e, g.dir).inner + 0.3; o < laneInfo(g.e, g.dir).outer - 0.3; o += 1) bar(white, g, o, Math.min(o + 0.55, g.w / 2 - 0.3), 0.25, back);
   }
   for (const z of net.zebras) {
     const white = accFor(z.x, z.z).white;
@@ -108,9 +100,17 @@ export function buildWorld(scene, net, traffic) {
   // roundabout islands and mini-roundabouts
   const grass = new T.MeshLambertMaterial({ color: 0x7ea463 }), kerb = new T.MeshLambertMaterial({ color: 0xd8d6cf });
   for (const r of net.rbs) {
+    if (net.islands.some(i => pointInPolygon(r.x, r.z, i.points))) continue;
     const ir = r.r - r.w / 2 - 0.4; if (ir < 1.5) continue;
     const k = new T.Mesh(new T.CylinderGeometry(ir + 0.4, ir + 0.4, 0.16, 40), kerb); k.position.set(r.x, 0.08, r.z); scene.add(k);
     const g = new T.Mesh(new T.CylinderGeometry(ir, ir, 0.3, 40), grass); g.position.set(r.x, 0.15, r.z); scene.add(g);
+  }
+  // Editable island/reservation outlines, shared with the examiner's non-drivable areas.
+  for (const island of net.islands) {
+    const shape = new T.Shape(island.points.map(([x, z]) => new T.Vector2(x, -z)));
+    const geometry = new T.ExtrudeGeometry(shape, { depth: 0.15, bevelEnabled: false });
+    geometry.rotateX(-Math.PI / 2);
+    const mesh = new T.Mesh(geometry, kerb); mesh.position.y = 0.045; mesh.receiveShadow = true; scene.add(mesh);
   }
   for (const m of net.minis) { const d = new T.Mesh(new T.CircleGeometry(1.6, 24), wm); d.rotation.x = -Math.PI / 2; d.position.set(m.x, 0.08, m.z); d.renderOrder = 3; scene.add(d); }
 
@@ -188,10 +188,7 @@ export function buildWorld(scene, net, traffic) {
 }
 
 function dash(acc, e, s, len, off, y) {
-  const a = posAt(e, s), b = posAt(e, Math.min(e.len, s + len));
-  const ax = a.x + a.tz * off, az = a.z - a.tx * off, bx = b.x + b.tz * off, bz = b.z - b.tx * off;
-  const nx = a.tz * 0.07, nz = -a.tx * 0.07;
-  acc.quad(ax + nx, az + nz, ax - nx, az - nz, bx - nx, bz - nz, bx + nx, bz + nz, y);
+  ribbon(acc, e, off - 0.07, off + 0.07, y, s, s + len);
 }
 function bikeTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');

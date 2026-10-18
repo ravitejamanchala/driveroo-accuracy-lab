@@ -13,3 +13,8 @@ for (const f of fs.readdirSync(path.join(SRC, 'data/areas'))) {
 }
 for (const f of fs.readdirSync(path.join(SRC, 'models'))) fs.copyFileSync(path.join(SRC, 'models', f), path.join(OUT, 'models', f));
 console.log('built', fs.statSync(path.join(OUT, 'app.js')).size, 'bytes');
+
+fs.copyFileSync(path.join(SRC, 'data/corrections.json'), path.join(OUT, 'data/corrections.json'));
+fs.copyFileSync(path.join(SRC, 'data/cambridge.json'), path.join(OUT, 'data/cambridge.json'));
+fs.copyFileSync(path.join(SRC, 'editor.html'), path.join(OUT, 'editor.html'));
+fs.cpSync(path.join(SRC, 'js'), path.join(OUT, 'js'), { recursive: true });
