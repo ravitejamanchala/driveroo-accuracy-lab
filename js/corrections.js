@@ -1,3 +1,4 @@
+import { smoothRoad } from './map-features.js';
 export const DRAFT_KEY = 'driveroo-accuracy-lab:corrections:v1';
 export function edgeKey(d, edge) {
   const w = d.ways[edge[2]], f = edge[3];
@@ -13,11 +14,16 @@ export function validateCorrections(c) {
     if (!v || typeof v !== 'object') throw Error('Invalid road correction.');
     if (v.width !== undefined && (!Number.isFinite(v.width) || v.width < 2 || v.width > 40)) throw Error('Road width must be 2–40 metres.');
     for (const k of ['lanesForward', 'lanesBackward']) if (v[k] !== undefined && (!Number.isInteger(v[k]) || v[k] < 0 || v[k] > 8)) throw Error('Lane counts must be whole numbers from 0 to 8.');
+    for (const k of ['centreStyle', 'laneStyle']) if (v[k] !== undefined && !['dashed','solid','double','none'].includes(v[k])) throw Error('Invalid marking style.');
+    if (v.smooth !== undefined && typeof v.smooth !== 'boolean') throw Error('Invalid curve setting.');
     if (v.points && (!pointsOK(v.points) || v.points.length < 2 || v.points.some((p, i) => i && Math.hypot(p[0] - v.points[i - 1][0], p[1] - v.points[i - 1][1]) < 0.15))) throw Error('Road points must be finite and at least 0.15 metres apart.');
   }
   if (!Array.isArray(c.lamps) || !Array.isArray(c.islands)) throw Error('Expected lamps and islands arrays.');
+  if (c.hiddenLamps !== undefined && (!Array.isArray(c.hiddenLamps) || c.hiddenLamps.some(p => ![p.x,p.z].every(Number.isFinite)))) throw Error('Invalid hidden lamp positions.');
+  if (c.markings !== undefined && (!Array.isArray(c.markings) || c.markings.some(m => typeof m.edgeKey !== 'string' || !['dashed','solid','double','zebra','stop'].includes(m.type) || ![m.s,m.offset,m.length,m.width].every(Number.isFinite) || m.s < 0 || m.length < .2 || m.length > 2000 || m.width < .05 || m.width > 2 || Math.abs(m.offset) > 40))) throw Error('Invalid road marking dimensions.');
   for (const p of c.lamps) if (![p.x, p.z].every(Number.isFinite)) throw Error('Invalid lamp coordinates.');
   for (const p of c.islands) {
+    if (p.height !== undefined && (!Number.isFinite(p.height) || p.height < .05 || p.height > 2)) throw Error('Divider height must be 0.05–2 metres.');
     if (!pointsOK(p.points) || p.points.length < 3) throw Error('An island needs at least three coordinate pairs.');
     const ps = p.points, area = ps.reduce((a, v, i) => { const q = ps[(i + 1) % ps.length]; return a + v[0] * q[1] - q[0] * v[1]; }, 0);
     if (Math.abs(area) < 0.1) throw Error('Island polygon has no usable area.');
@@ -38,6 +44,7 @@ export function applyCorrections(data, corrections) {
     const key = edgeKey(data, data.edges[i]), c = corrections.edges[key];
     if (!c) return;
     const w = d.ways[edge[2]].slice(), meta = { ...(w[11] || {}), correction: true };
+    for (const k of ['centreStyle','laneStyle']) if (c[k] !== undefined) meta[k] = c[k];
     if (c.width !== undefined) { w[5] = c.width; meta.widthSource = 'manual'; }
     if (c.lanesForward !== undefined) meta.lanesForward = c.lanesForward;
     if (c.lanesBackward !== undefined) meta.lanesBackward = c.lanesBackward;
@@ -49,7 +56,7 @@ export function applyCorrections(data, corrections) {
     if (w[5] - cycles < 2) throw Error('Road width must leave at least 2 metres outside cycle lanes.');
     w[11] = meta; edge[2] = d.ways.length; d.ways.push(w);
     if (c.points) {
-      const f = c.points.flatMap(p => p.map(v => Math.round(v * 10)));
+      const f = (c.smooth ? smoothRoad(c.points) : c.points).flatMap(p => p.map(v => Math.round(v * 10)));
       // Endpoint movement changes graph connectivity. Edit interior points only in this version.
       if (f[0] !== edge[3][0] || f[1] !== edge[3][1] || f.at(-2) !== edge[3].at(-2) || f.at(-1) !== edge[3].at(-1)) throw Error('Road corrections must retain junction endpoints.');
       // Reproject source stop/crossing positions, rather than retaining stale distances.

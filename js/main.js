@@ -14,6 +14,7 @@ import { createMirrors } from './mirrors.js';
 import { createGuide } from './guide.js';
 import { STAR } from './icons.js';
 import { DRAFT_KEY, validateCorrections } from './corrections.js';
+import { loadMapPackage, resolveMapURL } from './map-package.js';
 
 const T = THREE, $ = id => document.getElementById(id);
 const shadowed = (o) => { o.traverse(c => { if (c.isMesh) c.castShadow = true; }); return o; };
@@ -23,11 +24,13 @@ const setLoad = (msg) => { const el = $('loadMsg'); if (el) el.textContent = msg
 async function boot() {
   if (!window.THREE) throw new Error('The 3D library did not load. Check your connection and reload.');
   setLoad('Loading accuracy experiment…');
-  const correctionResponse = await fetch('data/corrections.json');
-  if (!correctionResponse.ok) throw Error('Corrections did not load');
-  let corrections = validateCorrections(await correctionResponse.json());
+  const mapParam = new URLSearchParams(location.search).get('map');
+  const remoteMap = mapParam ? await loadMapPackage(resolveMapURL(mapParam,location.href)) : null;
+  const correctionResponse = remoteMap ? null : await fetch('data/corrections.json');
+  if (correctionResponse && !correctionResponse.ok) throw Error('Corrections did not load');
+  let corrections = remoteMap ? remoteMap.corrections : validateCorrections(await correctionResponse.json());
   const draft = localStorage.getItem(DRAFT_KEY);
-  if (draft) corrections = validateCorrections(JSON.parse(draft));
+  if (draft && !remoteMap) corrections = validateCorrections(JSON.parse(draft));
   const ix = await fetch(AREAS_URL + 'index.json'); if (!ix.ok) throw new Error('Map index did not load (' + ix.status + ')');
   const index = await ix.json();
   const meta = (key) => index.plans[key] || { len: 0, n: 0, first: '' };
@@ -64,8 +67,8 @@ async function boot() {
       if (A.id === id) return;
       const info = index.areas.find(a => a.id === id); if (!info) throw new Error('Unknown map area ' + id);
       $('areaLoad').hidden = false;
-      const r = await fetch(AREAS_URL + info.file); if (!r.ok) throw new Error('Map area did not load (' + r.status + ')');
-      const d = await r.json();
+      const r = remoteMap ? null : await fetch(AREAS_URL + info.file); if (r && !r.ok) throw new Error('Map area did not load (' + r.status + ')');
+      const d = remoteMap ? remoteMap.data : await r.json();
       await new Promise(res => setTimeout(res, 16));
       if (A.test) A.test.running = false;
       const old = scene; scene = new T.Scene(); scene.add(camera, player.mesh, guide.group); carI = bikeI = 0;

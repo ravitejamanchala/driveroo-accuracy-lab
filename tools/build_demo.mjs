@@ -18,3 +18,5 @@ fs.copyFileSync(path.join(SRC, 'data/corrections.json'), path.join(OUT, 'data/co
 fs.copyFileSync(path.join(SRC, 'data/cambridge.json'), path.join(OUT, 'data/cambridge.json'));
 fs.copyFileSync(path.join(SRC, 'editor.html'), path.join(OUT, 'editor.html'));
 fs.cpSync(path.join(SRC, 'js'), path.join(OUT, 'js'), { recursive: true });
+
+if (fs.existsSync(path.join(SRC, 'maps'))) fs.cpSync(path.join(SRC, 'maps'), path.join(OUT, 'maps'), { recursive: true });

@@ -81,3 +81,31 @@ test('existing Cambridge routes, lessons and puzzles still build with finite lan
     const route = buildRoute(net, plan.waypoints.map(w => snapWaypoint(net, w))); assert.ok(route.steps.length > 0, plan.id); assert.ok(Number.isFinite(route.len), plan.id);
   }
 });
+
+test('smoothed road retains graph endpoints and editable source control polygon', async () => {
+  const {smoothRoad}=await import('../js/map-features.js');
+  const points=[[0,0],[20,0],[20,20]],sampled=smoothRoad(points);
+  assert.deepEqual(sampled[0],points[0]);assert.deepEqual(sampled.at(-1),points.at(-1));assert.ok(sampled.length>points.length);
+  const d=fixture([0,0,200,0,200,200]),c=correction();c.edges[edgeKey(d,d.edges[0])]={points,smooth:true};
+  const net=buildNet(d,c);assert.ok(net.edges[0].n>3);assert.equal(c.edges[edgeKey(d,d.edges[0])].points.length,3);
+});
+test('road marking settings and custom markings survive engine correction loading', async()=>{
+  const {markingQuads,autoMarkings}=await import('../js/map-features.js');const d=fixture(),c=correction(),key=edgeKey(d,d.edges[0]);
+  c.edges[key]={centreStyle:'none',laneStyle:'solid'};c.markings=[{edgeKey:key,type:'double',s:10,length:12,width:.14,offset:0}];
+  const n=buildNet(d,c);assert.equal(n.markings.length,1);assert.equal(markingQuads(n.edges[0],autoMarkings(n.edges[0])[0]).length,0);assert.equal(markingQuads(n.edges[0],n.markings[0]).length,2);
+});
+test('deleting inferred lamps persists and moving nearby does not hide the manual replacement',()=>{
+  const d=fixture(),c=correction(),n=buildNet(d),bounds={cx:-1,cz:0,size:400};
+  const p=lampPlacements(n,n.edges,bounds).find(p=>p.source==='inferred');assert.ok(p);
+  c.hiddenLamps=[{x:p.x,z:p.z}];let edited=buildNet(d,c);assert.ok(!lampPlacements(edited,edited.edges,bounds).some(q=>Math.hypot(q.x-p.x,q.z-p.z)<.1));
+  c.lamps=[{x:p.x-.2,z:p.z}];edited=buildNet(d,c);assert.ok(lampPlacements(edited,edited.edges,bounds).some(q=>q.source==='manual'));
+});
+test('divider path produces a valid raised polygon and rejects a crossing outline',async()=>{
+  const {dividerPolygon}=await import('../js/map-features.js');const c=correction();c.islands=[{points:dividerPolygon([[0,0],[0,20],[10,30]],1.2),height:.4}];assert.doesNotThrow(()=>validateCorrections(c));assert.ok(pointInPolygon(0,10,c.islands[0].points));c.islands[0].height=-1;assert.throws(()=>validateCorrections(c));
+});
+test('map package roundtrip preserves edits and rejects unsupported formats and unsafe URLs',async()=>{
+  const {createMapPackage,validateMapPackage,resolveMapURL,loadMapPackage}=await import('../js/map-package.js');const d=fixture(),c=correction();c.edges[edgeKey(d,d.edges[0])]={width:12};
+  const pack=createMapPackage(d,c),copy=validateMapPackage(JSON.parse(JSON.stringify(pack)));assert.equal(buildNet(copy.data,copy.corrections).edges[0].way.w,12);assert.throws(()=>validateMapPackage({...pack,version:7}));assert.throws(()=>resolveMapURL('javascript:alert(1)','https://example.com'));
+  assert.equal(resolveMapURL('maps/v1/map.json','https://example.com/lab/'),'https://example.com/lab/maps/v1/map.json');
+  const fetched=await loadMapPackage('https://example.com/map.json',async()=>({ok:true,headers:new Headers(),text:async()=>JSON.stringify(pack)}));assert.equal(fetched.format,'driveroo-map');
+});

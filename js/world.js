@@ -6,6 +6,7 @@ import { buildChunkContent } from './city.js';
 import { buildSigns } from './signs.js';
 import { ribbonQuads, pointInPolygon } from './road-geometry.js';
 
+import { autoMarkings, markingQuads } from './map-features.js';
 const T = THREE;
 
 function rng(seed) { let s = seed | 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -49,15 +50,7 @@ export function buildWorld(scene, net, traffic) {
     const wy = e.way, w = wy.w, A = accFor(e.px[0], e.pz[0]), pave = A.pave, road = A.road, white = A.white;
     ribbon(pave, e, -(w / 2 + 2.6), w / 2 + 2.6, 0.02);
     ribbon(road, e, -w / 2, w / 2, 0.04);
-    if (!wy.rb && e.len > 16) {
-      // lane dividers within each direction
-      for (const dir of wy.oneway ? [1] : [1, -1]) {
-        const L = laneInfo(e, dir);
-        for (let k = 1; k < L.n; k++) { const o = (L.outer - L.laneW * k) * dir; for (let s = 8; s < e.len - 8; s += 9) dash(white, e, s, 3, o, 0.07); }
-      }
-      // centre line on two-way main roads, kept clear of junctions
-      if (!wy.oneway && (/^(primary|secondary|tertiary|trunk)/.test(wy.cls) || wy.lanes >= 2)) for (let s = 9; s < e.len - 9; s += 9) dash(white, e, s, 3.2, laneInfo(e, 1).boundary, 0.07);
-    }
+    for (const m of autoMarkings(e)) for (const [a,b,c,d] of markingQuads(e,m)) white.quad(a.x,a.z,b.x,b.z,c.x,c.z,d.x,d.z,.07);
     // cycle lanes: red surface, solid edge line if mandatory, long dashes if advisory, bike symbols
     for (const [code, side] of [[wy.cl, 1], [wy.cr, -1]]) {
       if ((code !== 1 && code !== 2) || e.len < 6) continue;
@@ -68,6 +61,7 @@ export function buildWorld(scene, net, traffic) {
       for (let s = 12; s < e.len - 6; s += 40) { const p = posAt(e, s); const o = side * (w / 2 - wy.cw / 2); bikeMarks.push([p.x + p.tz * o, p.z - p.tx * o, Math.atan2(-p.tx * side, -p.tz * side)]); }
     }
   }
+  for (const m of net.markings) for (const [a,b,c,d] of markingQuads(m.e,m)) accFor(a.x,a.z).white.quad(a.x,a.z,b.x,b.z,c.x,c.z,d.x,d.z,.075);
   for (const st of net.stops) bar(accFor(st.x, st.z).white, st, laneInfo(st.e, st.dir).inner + 0.2, laneInfo(st.e, st.dir).outer - 0.3, 0.35);
   for (const g of net.giveways) {
     const white = accFor(g.x, g.z).white;
@@ -108,7 +102,7 @@ export function buildWorld(scene, net, traffic) {
   // Editable island/reservation outlines, shared with the examiner's non-drivable areas.
   for (const island of net.islands) {
     const shape = new T.Shape(island.points.map(([x, z]) => new T.Vector2(x, -z)));
-    const geometry = new T.ExtrudeGeometry(shape, { depth: 0.15, bevelEnabled: false });
+    const geometry = new T.ExtrudeGeometry(shape, { depth: island.height || 0.15, bevelEnabled: false });
     geometry.rotateX(-Math.PI / 2);
     const mesh = new T.Mesh(geometry, kerb); mesh.position.y = 0.045; mesh.receiveShadow = true; scene.add(mesh);
   }

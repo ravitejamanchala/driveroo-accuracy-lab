@@ -76,3 +76,60 @@ Useful references:
 - https://www.gov.uk/government/publications/traffic-signs-manual
 - https://wiki.openstreetmap.org/wiki/Lanes
 - https://wiki.openstreetmap.org/wiki/Tag:highway%3Dstreet_lamp
+
+## Map studio and live geometry preview
+
+Open `editor.html`. Select/drag road controls, lamps, painted markings and islands.
+The live panel provides a 1.25 m driver-eye camera or a raised follow camera; click
+**Place car** and a road, scrub the distance slider, or travel along the selected
+section. Geometry updates during edits. This lightweight preview omits buildings,
+traffic and some original street decoration; use **Try the drive** for the full engine.
+
+- Road inspector: width, directional lane counts, centre/lane line styles, and an
+  endpoint-preserving smoothed curve. Control handles remain editable.
+- Marking tool: dashed, solid, double lines, zebra stripes and stop bars. Select,
+  drag, edit dimensions or delete custom paint. Existing centre/lane paint is
+  controlled through road styles; source crossings/signals are not individually editable yet.
+- Divider: draw a path, set width and height, then Enter. Select its resulting
+  polygon to move or reshape vertices; height remains editable.
+- Lamp: place, move or delete. Deleting mapped/generated lamps stores a suppression
+  record, preserving source data. Undo/redo applies to geometry and furniture.
+- Space/middle/right drag pans, scroll zooms at cursor; V/H/L/M/D/I/C select tools,
+  Delete removes selection, F fits, Escape cancels, Ctrl/Cmd-Z undoes, Shift-Z redoes.
+- Layer controls filter the overhead map only. JSON import/export and automatic
+  local draft persistence remain available. Drafts are per browser/origin.
+- Mapillary reference opens the selected section’s location. It does not claim
+  imagery coverage or import detections. Automated suggestions require API access,
+  source/date attribution, coordinate checks and review before publication.
+
+## Exported maps, GitHub Pages and CDN loading
+
+**Export map package** downloads `cambridge-map.json` containing the original
+network plus corrections, schema/version and OSM attribution. The source geometry
+is retained so stable correction IDs survive a round-trip. Reimport it in the editor.
+
+CLI: `node tools/export_map.mjs data/corrections.json maps/v1/cambridge-map.json`.
+Use a new version directory (v2, v3…) for releases; do not overwrite published versions
+if clients depend on their exact content. `maps/v1/` is the initial uncorrected export.
+
+The static repo can be served directly by GitHub Pages (main branch, repository root).
+No build or backend is required. Keep `.nojekyll`. Private repositories require a
+compatible GitHub plan; the Pages site normally exposes the published static files.
+No automatic repository visibility change is performed by this project.
+
+After hosting a package, open:
+
+`index.html?map=https%3A%2F%2Fyour-host.example%2Fmaps%2Fv1%2Fcambridge-map.json`
+
+The editor’s **Load URL in engine** builds that link for you. Remote packages use
+HTTPS, omit credentials, have a 20-second timeout and basic schema/size validation.
+External hosts must provide CORS allowing the engine origin. A remote package takes
+precedence over browser drafts and bundled corrections; a failed URL reports an
+error, rather than silently replacing it with a different map. The current lesson
+catalog remains Cambridge-specific. The full package is loaded once and reused for
+areas; tile/chunk streaming is future work for national coverage.
+
+The private ChatGPT Site is a review deployment, not a public cross-origin CDN.
+Publish the JSON on Pages or another public static host for independent engines.
+Browser edits are local until exported and committed/uploaded; there are no GitHub
+write tokens or Mapillary secrets in client code.

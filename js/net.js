@@ -60,6 +60,9 @@ export function buildNet(source, corrections) {
   net.rbs = d.rbs.map(([x, z, r, w]) => ({ x: x / 10, z: z / 10, r: r / 10, w: w / 10 }));
   net.lamps = (d.lamps || []).map(([x, z]) => ({ x: x / 10, z: z / 10, source: 'mapped' })).concat((d.manualLamps || []).map(p => ({ ...p, source: 'manual' })));
   net.islands = d.islands || [];
+  net.hiddenLamps = corrections?.hiddenLamps || [];
+  const byKey = new Map(edges.map(e => [e.key,e]));
+  net.markings = (corrections?.markings || []).map(m => ({...m,e:byKey.get(m.edgeKey)})).filter(m => m.e);
   net.proceduralLamps = corrections?.proceduralLamps !== false;
   net.stopsByEdge = new Map(); net.zebrasByEdge = new Map();
   for (const s of net.stops) push(net.stopsByEdge, s.e.id, s);
